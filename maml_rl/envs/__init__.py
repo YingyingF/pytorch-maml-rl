@@ -10,6 +10,13 @@ for k in [5, 10, 50]:
         kwargs={'k': k}
     )
 
+for k in [5, 10, 50]:
+    register(
+        'Bandit-K{0}-v1'.format(k),
+        entry_point='maml_rl.envs.bandit:GaussianBanditEnv',
+        kwargs={'k': k}
+    )
+
 # TabularMDP
 # ----------------------------------------
 
@@ -27,7 +34,7 @@ register(
     'AntVel-v1',
     entry_point='maml_rl.envs.utils:mujoco_wrapper',
     kwargs={'entry_point': 'maml_rl.envs.mujoco.ant:AntVelEnv'},
-    max_episode_steps=200
+    max_episode_steps=400
 )
 
 register(
@@ -65,4 +72,12 @@ register(
     '2DNavigation-v0',
     entry_point='maml_rl.envs.navigation:Navigation2DEnv',
     max_episode_steps=100
+)
+
+# PendulumEnv
+# ----------------------------------------
+register(
+    'PendulumTheta-v0',
+    entry_point='maml_rl.envs.pendulum:PendulumEnv',
+    max_episode_steps=200
 )
