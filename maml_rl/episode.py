@@ -12,7 +12,6 @@ class BatchEpisodes(object):
         self._actions_list = [[] for _ in range(batch_size)]
         self._rewards_list = [[] for _ in range(batch_size)]
         self._mask_list = []
-
         self._observations = None
         self._actions = None
         self._rewards = None

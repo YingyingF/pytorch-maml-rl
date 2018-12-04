@@ -10,6 +10,7 @@ class LinearFeatureBaseline(nn.Module):
         (https://arxiv.org/abs/1604.06778)
     """
     def __init__(self, input_size, reg_coeff=1e-5):
+        print("In baseline init")
         super(LinearFeatureBaseline, self).__init__()
         self.input_size = input_size
         self._reg_coeff = reg_coeff
@@ -18,9 +19,11 @@ class LinearFeatureBaseline(nn.Module):
 
     @property
     def feature_size(self):
+        print("In baseline feature size")
         return 2 * self.input_size + 4
 
     def _feature(self, episodes):
+        print("In baseline _feature")
         ones = episodes.mask.unsqueeze(2)
         observations = episodes.observations * ones
         cum_sum = torch.cumsum(ones, dim=0) * ones
@@ -30,8 +33,10 @@ class LinearFeatureBaseline(nn.Module):
             al, al ** 2, al ** 3, ones], dim=2)
 
     def fit(self, episodes):
+        print("In baseline fit")
         # sequence_length * batch_size x feature_size
         featmat = self._feature(episodes).view(-1, self.feature_size)
+
         # sequence_length * batch_size x 1
         returns = episodes.returns.view(-1, 1)
 
@@ -55,5 +60,6 @@ class LinearFeatureBaseline(nn.Module):
         self.linear.weight.data = coeffs.data.t()
 
     def forward(self, episodes):
+        print("In baseline forward")
         features = self._feature(episodes)
         return self.linear(features)

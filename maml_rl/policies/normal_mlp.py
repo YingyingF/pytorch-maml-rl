@@ -42,6 +42,7 @@ class NormalMLPPolicy(Policy):
                 weight=params['layer{0}.weight'.format(i)],
                 bias=params['layer{0}.bias'.format(i)])
             output = self.nonlinearity(output)
+
         mu = F.linear(output, weight=params['mu.weight'],
             bias=params['mu.bias'])
         scale = torch.exp(torch.clamp(params['sigma'], min=self.min_log_std))

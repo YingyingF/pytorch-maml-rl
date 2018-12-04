@@ -27,9 +27,10 @@ class MetaLearner(object):
         (https://arxiv.org/abs/1502.05477)
     """
     def __init__(self, sampler, policy, baseline, gamma=0.95,
-                 fast_lr=0.5, tau=1.0, device='cpu'):
+                 fast_lr=0.5, tau=1.0, device='cpu', value_fn=None):
         self.sampler = sampler
         self.policy = policy
+        self.value_fn = value_fn
         self.baseline = baseline
         self.gamma = gamma
         self.fast_lr = fast_lr
@@ -41,7 +42,10 @@ class MetaLearner(object):
         loss is REINFORCE with baseline [2], computed on advantages estimated 
         with Generalized Advantage Estimation (GAE, [3]).
         """
-        values = self.baseline(episodes)
+
+        # values = self.baseline(episodes)
+        values = self.value_fn(episodes.observations)
+
         advantages = episodes.gae(values, tau=self.tau)
         advantages = weighted_normalize(advantages, weights=episodes.mask)
 
@@ -52,18 +56,30 @@ class MetaLearner(object):
         loss = -weighted_mean(log_probs * advantages, dim=0,
             weights=episodes.mask)
 
-        return loss
+        #find value loss sum [(R-V(s))^2]
+        R = episodes.returns.view([200, 20, 1])
+        vf_loss = (((values - R)**2).mean())**(1/2)
+
+        return loss, vf_loss
 
     def adapt(self, episodes, first_order=False):
-        """Adapt the parameters of the policy network to a new task, from 
+        """Adapt the parameters of the policy network to a new task, from
         sampled trajectories `episodes`, with a one-step gradient update [1].
         """
         # Fit the baseline to the training episodes
-        self.baseline.fit(episodes)
+        # print("Fitting baseline...")
+        # self.baseline.fit(episodes)
+        # print("Finished fitting baseline...")
+
         # Get the loss on the training episodes
-        loss = self.inner_loss(episodes)
+        loss, vf_loss = self.inner_loss(episodes)
+
         # Get the new parameters after a one-step gradient update
         params = self.policy.update_params(loss, step_size=self.fast_lr,
+            first_order=first_order)
+
+        # update value function params
+        self.value_fn.update_params(vf_loss, step_size=self.fast_lr,
             first_order=first_order)
 
         return params
@@ -73,13 +89,12 @@ class MetaLearner(object):
         for all the tasks `tasks`.
         """
         episodes = []
+
         for task in tasks:
             self.sampler.reset_task(task)
             train_episodes = self.sampler.sample(self.policy,
                 gamma=self.gamma, device=self.device)
-
             params = self.adapt(train_episodes, first_order=first_order)
-
             valid_episodes = self.sampler.sample(self.policy, params=params,
                 gamma=self.gamma, device=self.device)
             episodes.append((train_episodes, valid_episodes))
@@ -134,7 +149,8 @@ class MetaLearner(object):
                 if old_pi is None:
                     old_pi = detach_distribution(pi)
 
-                values = self.baseline(valid_episodes)
+                # values = self.baseline(valid_episodes)
+                values = self.value_fn(valid_episodes.observations)
                 advantages = valid_episodes.gae(values, tau=self.tau)
                 advantages = weighted_normalize(advantages,
                     weights=valid_episodes.mask)
@@ -198,5 +214,6 @@ class MetaLearner(object):
 
     def to(self, device, **kwargs):
         self.policy.to(device, **kwargs)
-        self.baseline.to(device, **kwargs)
+        # self.baseline.to(device, **kwargs)
+        self.value_fn.to(device, **kwargs)
         self.device = device

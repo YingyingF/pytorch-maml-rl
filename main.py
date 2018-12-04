@@ -5,7 +5,7 @@ import torch
 import json
 
 from maml_rl.metalearner import MetaLearner
-from maml_rl.policies import CategoricalMLPPolicy, NormalMLPPolicy
+from maml_rl.policies import CategoricalMLPPolicy, NormalMLPPolicy, CriticFunction
 from maml_rl.baseline import LinearFeatureBaseline
 from maml_rl.sampler import BatchSampler
 
@@ -19,7 +19,7 @@ def total_rewards(episodes_rewards, aggregation=torch.mean):
 def main(args):
     continuous_actions = (args.env_name in ['AntVel-v1', 'AntDir-v1',
         'AntPos-v0', 'HalfCheetahVel-v1', 'HalfCheetahDir-v1',
-        '2DNavigation-v0'])
+        '2DNavigation-v0', 'PendulumTheta-v0'])
 
     writer = SummaryWriter('./logs/{0}'.format(args.output_folder))
     save_folder = './saves/{0}'.format(args.output_folder)
@@ -42,29 +42,61 @@ def main(args):
             int(np.prod(sampler.envs.observation_space.shape)),
             sampler.envs.action_space.n,
             hidden_sizes=(args.hidden_size,) * args.num_layers)
-    baseline = LinearFeatureBaseline(
-        int(np.prod(sampler.envs.observation_space.shape)))
 
-    metalearner = MetaLearner(sampler, policy, baseline, gamma=args.gamma,
-        fast_lr=args.fast_lr, tau=args.tau, device=args.device)
+    # BASELINE
+    # print("Initializing baseline...")
+    # baseline = LinearFeatureBaseline(
+    #     int(np.prod(sampler.envs.observation_space.shape)))
+    # print("Finished initializing baseline.")
+
+    # CRITIC
+    value_fn = CriticFunction(
+            int(np.prod(sampler.envs.observation_space.shape)),
+            1,
+            hidden_sizes=(args.hidden_size,) * args.num_layers)
+
+    # BASELINE
+    # print("Creating metalearner...")
+    # metalearner = MetaLearner(sampler, policy, baseline, gamma=args.gamma,
+    #     fast_lr=args.fast_lr, tau=args.tau, device=args.device)
+    # print("Finished creating metalearner.")
+
+    # CRITIC
+    metalearner = MetaLearner(sampler, policy, value_fn, gamma=args.gamma,
+        fast_lr=args.fast_lr, tau=args.tau, device=args.device, value_fn=value_fn)
 
     for batch in range(args.num_batches):
+        print("*********************** Batch: " + str(batch) + "  ****************************")
+
+        print("Creating tasks...")
         tasks = sampler.sample_tasks(num_tasks=args.meta_batch_size)
+        print("Finished creating tasks.")
+
+        print("Creating episodes...")
         episodes = metalearner.sample(tasks, first_order=args.first_order)
+        print("Finished creating episodes.")
+
+        print("Taking a meta step...")
         metalearner.step(episodes, max_kl=args.max_kl, cg_iters=args.cg_iters,
             cg_damping=args.cg_damping, ls_max_steps=args.ls_max_steps,
             ls_backtrack_ratio=args.ls_backtrack_ratio)
+        print("Finished taking a meta step.")
 
+        print("Writing results to tensorboard...")
         # Tensorboard
         writer.add_scalar('total_rewards/before_update',
             total_rewards([ep.rewards for ep, _ in episodes]), batch)
         writer.add_scalar('total_rewards/after_update',
             total_rewards([ep.rewards for _, ep in episodes]), batch)
+        print("Finished writing results to tensorboard.")
 
+        print("Saving policy network...")
         # Save policy network
         with open(os.path.join(save_folder,
                 'policy-{0}.pt'.format(batch)), 'wb') as f:
             torch.save(policy.state_dict(), f)
+        print("Finished saving policy network.")
+        print("***************************************************")
 
 
 if __name__ == '__main__':
