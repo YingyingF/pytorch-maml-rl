@@ -30,6 +30,8 @@ class MetaLearner(object):
                  fast_lr=0.5, tau=1.0, device='cpu', baseline_type = 'linear'):
         self.sampler = sampler
         self.policy = policy
+        if self.baseline_type == 'critic connected':
+           self.values = policy.value
         self.baseline = baseline
         self.gamma = gamma
         self.fast_lr = fast_lr
@@ -44,6 +46,7 @@ class MetaLearner(object):
         """
 
         vf_loss = -1
+        loss =0
         if self.baseline_type == 'linear':
             values = self.baseline(episodes)
         elif self.baseline_type == 'critic separate':
@@ -51,8 +54,11 @@ class MetaLearner(object):
             # find value loss sum [(R-V(s))^2]
             R = episodes.returns.view([200, 20, 1])
             vf_loss = (((values - R) ** 2).mean()) ** (1 / 2)
-        # else:
-        #     #RANJANI TO DO
+        else:
+            pi,values = self.policy(epispdes.observations)
+            pi,vi = self.policy(episodes.observations,params=params)
+            log_probs = pi.log_prob(values.size())
+            loss = ((values-R)**2).mean())**(1/2) 
 
 
         advantages = episodes.gae(values, tau=self.tau)
@@ -62,8 +68,9 @@ class MetaLearner(object):
         log_probs = pi.log_prob(episodes.actions)
         if log_probs.dim() > 2:
             log_probs = torch.sum(log_probs, dim=2)
-        loss = -weighted_mean(log_probs * advantages, dim=0,
+        loss = loss -weighted_mean(log_probs * advantages, dim=0,
             weights=episodes.mask)
+        
 
         return loss, vf_loss
 
@@ -73,11 +80,15 @@ class MetaLearner(object):
         """
         # Get the loss on the training episodes
         loss, vf_loss = self.inner_loss(episodes)
+        
 
         # Get the new parameters after a one-step gradient update
         params = self.policy.update_params(loss, step_size=self.fast_lr,
             first_order=first_order)
-
+        if self.baseline_type = 'critic shared':
+            loss = sled.inner_loss(episodes)[0]
+            params = self.policy.update_params(loss,step_size=self.fast_lr,first_order=first order)
+          
         # update value function params
         if vf_loss == -1:
             self.baseline.fit(episodes)
@@ -110,6 +121,8 @@ class MetaLearner(object):
 
         for (train_episodes, valid_episodes), old_pi in zip(episodes, old_pis):
             params = self.adapt(train_episodes)
+            if self.baseline_type = 'critic shared':
+              pi,_ = self.policy(valid_episodes.obervations,params=params)
             pi = self.policy(valid_episodes.observations, params=params)
 
             if old_pi is None:
@@ -146,6 +159,8 @@ class MetaLearner(object):
         for (train_episodes, valid_episodes), old_pi in zip(episodes, old_pis):
             params = self.adapt(train_episodes)
             with torch.set_grad_enabled(old_pi is None):
+                if self.baseline_type == 'critic shared':
+                  pi,_ = self.policy(valid_episodes.observations,params =params)
                 pi = self.policy(valid_episodes.observations, params=params)
                 pis.append(detach_distribution(pi))
 
@@ -156,8 +171,8 @@ class MetaLearner(object):
                     values = self.baseline(valid_episodes)
                 elif self.baseline_type == 'critic separate':
                     values = self.baseline(valid_episodes.observations)
-                # elif self.baseline_type == 'critic shared'
-                #     #RANJANI TO DO
+                elif self.baseline_type == 'critic shared'
+                    _,values = self.policy(valid_episodes.observations,params =params)
 
                 advantages = valid_episodes.gae(values, tau=self.tau)
                 advantages = weighted_normalize(advantages,
