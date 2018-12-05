@@ -5,7 +5,7 @@ import torch
 import json
 
 from maml_rl.metalearner import MetaLearner
-from maml_rl.policies import CategoricalMLPPolicy, NormalMLPPolicy, CriticFunction
+from maml_rl.policies import CategoricalMLPPolicy, NormalMLPPolicy, CriticFunction,NormalMLPPolicyA2C
 from maml_rl.baseline import LinearFeatureBaseline
 from maml_rl.sampler import BatchSampler
 
@@ -37,6 +37,10 @@ def main(args):
             int(np.prod(sampler.envs.observation_space.shape)),
             int(np.prod(sampler.envs.action_space.shape)),
             hidden_sizes=(args.hidden_size,) * args.num_layers)
+    elif baseline_type = 'critic shared':
+        policy = NormalMLPPolicyA2C(int(np.prod(sampler.envs.observation_space.shape)),
+            int(np.prod(sampler.envs.action_space.shape)),
+            hidden_sizes=(args.hidden_size,) * args.num_layers) 
     else:
         policy = CategoricalMLPPolicy(
             int(np.prod(sampler.envs.observation_space.shape)),
@@ -51,7 +55,7 @@ def main(args):
                 int(np.prod(sampler.envs.observation_space.shape)),
                 1,
                 hidden_sizes=(args.hidden_size,) * args.num_layers)
-    # elif args.baseline == 'critic shared':
+    #elif args.baseline == 'critic shared':
     # RANJANI TO DO
 
     metalearner = MetaLearner(sampler, policy, baseline, gamma=args.gamma,
