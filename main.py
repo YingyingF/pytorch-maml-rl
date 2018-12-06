@@ -5,7 +5,7 @@ import torch
 import json
 
 from maml_rl.metalearner import MetaLearner
-from maml_rl.policies import CategoricalMLPPolicy, NormalMLPPolicy
+from maml_rl.policies import CategoricalMLPPolicy, NormalMLPPolicy, CriticFunction
 from maml_rl.baseline import LinearFeatureBaseline
 from maml_rl.sampler import BatchSampler
 
@@ -36,43 +36,66 @@ def main(args):
 
     sampler = BatchSampler(args.env_name, batch_size=args.fast_batch_size,
         num_workers=args.num_workers)
+    #if args.baseline == 'critic shared':
+    #    policy = NormalMLPPolicyA2C(int(np.prod(sampler.envs.observation_space.shape)),
+    #        int(np.prod(sampler.envs.action_space.shape)),
+    #        hidden_sizes=(args.hidden_size,) * args.num_layers)
     if continuous_actions:
         policy = NormalMLPPolicy(
             int(np.prod(sampler.envs.observation_space.shape)),
             int(np.prod(sampler.envs.action_space.shape)),
             hidden_sizes=(args.hidden_size,) * args.num_layers)
+
     else:
         policy = CategoricalMLPPolicy(
             int(np.prod(sampler.envs.observation_space.shape)),
             sampler.envs.action_space.n,
             hidden_sizes=(args.hidden_size,) * args.num_layers)
-    baseline = LinearFeatureBaseline(
-        int(np.prod(sampler.envs.observation_space.shape)))
+
+    if args.baseline == 'linear':
+        baseline = LinearFeatureBaseline(
+            int(np.prod(sampler.envs.observation_space.shape)))
+    elif args.baseline == 'critic separate':
+        baseline = CriticFunction(
+                int(np.prod(sampler.envs.observation_space.shape)),
+                1,
+                hidden_sizes=(args.hidden_size,) * args.num_layers)
+    #elif args.baseline == 'critic shared':
+    # RANJANI TO DO
 
     metalearner = MetaLearner(sampler, policy, baseline, gamma=args.gamma,
-        fast_lr=args.fast_lr, tau=args.tau, device=args.device,
+        fast_lr=args.fast_lr, tau=args.tau, device=args.device,baseline_type = args.baseline,
         cliprange=args.cliprange, noptepochs= args.noptepochs,
         nminibatches = args.nminibatches, ppo_lr=args.ppo_lr,
         useSGD=args.useSGD, ppo_momentum=args.ppo_momentum)
 
     for batch in range(args.num_batches):
+        print("*********************** Batch: " + str(batch) + "  ****************************")
+
+        print("Creating tasks...")
         tasks = sampler.sample_tasks(num_tasks=args.meta_batch_size)
 
+        print("Creating episodes...")
         episodes = metalearner.sample(tasks, first_order=args.first_order, use_ppo=args.usePPO)
+
+        print("Taking a meta step...")
         metalearner.step(episodes, max_kl=args.max_kl, cg_iters=args.cg_iters,
             cg_damping=args.cg_damping, ls_max_steps=args.ls_max_steps,
             ls_backtrack_ratio=args.ls_backtrack_ratio)
 
+        print("Writing results to tensorboard...")
         # Tensorboard
         writer.add_scalar('total_rewards/before_update',
             total_rewards([ep.rewards for ep, _ in episodes]), batch)
         writer.add_scalar('total_rewards/after_update',
             total_rewards([ep.rewards for _, ep in episodes]), batch)
 
+        print("Saving policy network...")
         # Save policy network
         with open(os.path.join(save_folder,
                 'policy-{0}.pt'.format(batch)), 'wb') as f:
             torch.save(policy.state_dict(), f)
+        print("***************************************************")
 
 
 if __name__ == '__main__':
@@ -92,6 +115,7 @@ if __name__ == '__main__':
         help='value of the discount factor for GAE')
     parser.add_argument('--first-order', action='store_true',
         help='use the first-order approximation of MAML')
+    parser.add_argument('--baseline', type=str, default='linear') # choices: 'linear', 'critic separate', 'critic shared'
 
     # Policy network (relu activation function)
     parser.add_argument('--hidden-size', type=int, default=100,

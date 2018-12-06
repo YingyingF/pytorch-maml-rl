@@ -43,9 +43,11 @@ class MetaLearner(object):
 
     def __init__(self, sampler, policy, baseline, gamma=0.95,
                  fast_lr=0.5, tau=1.0, device='cpu',cliprange=0.2, noptepochs=4,
-                nminibatches=8,ppo_lr=0.01,useSGD=True,ppo_momentum=0):
+                nminibatches=8,ppo_lr=0.01,useSGD=True,ppo_momentum=0,baseline_type = 'linear'):
         self.sampler = sampler
         self.policy = policy
+        #if self.baseline_type == 'critic connected':
+        #   self.values = policy.value
         self.baseline = baseline
         self.gamma = gamma
         self.fast_lr = fast_lr
@@ -57,6 +59,7 @@ class MetaLearner(object):
         self.ppo_lr=ppo_lr
         self.useSGD=useSGD
         self.ppo_momentum=ppo_momentum
+        self.baseline_type = baseline_type
 
     def inner_loss(self, episodes, params=None):
         """Compute the inner loss for the one-step gradient update. The inner
@@ -65,7 +68,22 @@ class MetaLearner(object):
         https://pytorch.org/docs/0.3.1/distributions.html (except using advantag
         instead of rewards.) Implements eq 4.
         """
-        values = self.baseline(episodes)
+
+        vf_loss = -1
+        loss =0
+        if self.baseline_type == 'linear':
+            values = self.baseline(episodes)
+        elif self.baseline_type == 'critic separate':
+            values = self.baseline(episodes.observations)
+            # find value loss sum [(R-V(s))^2]
+            R = episodes.returns.view([200, 20, 1])
+            vf_loss = (((values - R) ** 2).mean()) ** (1 / 2)
+        #else:
+        #    pi,values = self.policy(episodes.observations)
+        #    pi,vi = self.policy(episodes.observations,params=params)
+        #    log_probs = pi.log_prob(values.size())
+        #    loss = (((values - R) ** 2).mean()) ** (1 / 2)
+
         advantages = episodes.gae(values, tau=self.tau)
         advantages_unnorm = advantages
         sum_adv = torch.sum(advantages_unnorm).numpy()
@@ -79,11 +97,11 @@ class MetaLearner(object):
         if log_probs.dim() > 2:
             # sum over all the workers.
             log_probs = torch.sum(log_probs, dim=2)
-        loss = -weighted_mean(log_probs * advantages, dim=0,
+        loss = loss -weighted_mean(log_probs * advantages, dim=0,
             weights=episodes.mask)
         logging.info("inner loss: " + str(loss))
 
-        return loss
+        return loss, vf_loss
 
     def inner_loss_ppo(self, episodes, first_order,params=None, ent_coef=0,
                         vf_coef=0, nenvs = 1):
@@ -226,13 +244,24 @@ class MetaLearner(object):
         """Adapt the parameters of the policy network to a new task, from
         sampled trajectories `episodes`, with a one-step gradient update [1].
         """
-        # Fit the baseline to the training episodes
-        self.baseline.fit(episodes)
+        # Get the loss on the training episodes
+        loss, vf_loss = self.inner_loss(episodes)
 
-        loss = self.inner_loss(episodes)
+
         # Get the new parameters after a one-step gradient update
         params = self.policy.update_params(loss, step_size=self.fast_lr,
             first_order=first_order)
+
+        #if self.baseline_type = 'critic shared':
+        #    loss = self.inner_loss(episodes)[0]
+        #    params = self.policy.update_params(loss,step_size=self.fast_lr,first_order=first order)
+
+        # update value function params
+        if vf_loss == -1:
+            self.baseline.fit(episodes)
+        else:
+            self.baseline.update_params(vf_loss, step_size=self.fast_lr,
+                first_order=first_order)
 
         return params
 
@@ -252,6 +281,7 @@ class MetaLearner(object):
         for all the tasks `tasks`.
         """
         episodes = []
+
         for task in tasks:
             self.sampler.reset_task(task)
             train_episodes = self.sampler.sample(self.policy,
@@ -280,13 +310,12 @@ class MetaLearner(object):
         kls = []
         if old_pis is None:
             old_pis = [None] * len(episodes)
-        i = 0
+
         for (train_episodes, valid_episodes), old_pi in zip(episodes, old_pis):
-            #Adapt for each task!
-            i += 1
-            #pdb.set_trace()
             self.logger.info("in kl divergence")
-            params = self.adapt_ppo(train_episodes)
+            params = self.adapt(train_episodes)
+            #if self.baseline_type = 'critic shared':
+            #  pi,_ = self.policy(valid_episodes.obervations,params=params)
             pi = self.policy(valid_episodes.observations, params=params)
 
             if old_pi is None:
@@ -299,7 +328,6 @@ class MetaLearner(object):
             kls.append(kl)
         self.logger.info("kl:")
         self.logger.info(kls)
-        print(i)
         #pdb.set_trace()
         return torch.mean(torch.stack(kls, dim=0))
 
@@ -327,13 +355,21 @@ class MetaLearner(object):
             params = self.adapt_ppo(train_episodes)
             self.logger.info("in surrogate_loss")
             with torch.set_grad_enabled(old_pi is None):
+                if self.baseline_type == 'critic shared':
+                  pi,_ = self.policy(valid_episodes.observations,params =params)
                 pi = self.policy(valid_episodes.observations, params=params)
                 pis.append(detach_distribution(pi))
 
                 if old_pi is None:
                     old_pi = detach_distribution(pi)
 
-                values = self.baseline(valid_episodes)
+                if self.baseline_type == 'linear':
+                    values = self.baseline(valid_episodes)
+                elif self.baseline_type == 'critic separate':
+                    values = self.baseline(valid_episodes.observations)
+                elif self.baseline_type == 'critic shared':
+                    _,values = self.policy(valid_episodes.observations,params =params)
+
                 advantages = valid_episodes.gae(values, tau=self.tau)
                 advantages = weighted_normalize(advantages,
                     weights=valid_episodes.mask)
