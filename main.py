@@ -10,6 +10,7 @@ from maml_rl.baseline import LinearFeatureBaseline
 from maml_rl.sampler import BatchSampler
 
 from tensorboardX import SummaryWriter
+import logging
 
 def total_rewards(episodes_rewards, aggregation=torch.mean):
     rewards = torch.mean(torch.stack([aggregation(torch.sum(rewards, dim=0))
@@ -17,9 +18,12 @@ def total_rewards(episodes_rewards, aggregation=torch.mean):
     return rewards.item()
 
 def main(args):
+    logging.basicConfig(filename=args.debug_file, level=logging.WARNING, filemode='w')
+    logging.getLogger('metalearner').setLevel(logging.INFO)
+
     continuous_actions = (args.env_name in ['AntVel-v1', 'AntDir-v1',
         'AntPos-v0', 'HalfCheetahVel-v1', 'HalfCheetahDir-v1',
-        '2DNavigation-v0'])
+        '2DNavigation-v0','PendulumTheta-v0'])
 
     writer = SummaryWriter('./logs/{0}'.format(args.output_folder))
     save_folder = './saves/{0}'.format(args.output_folder)
@@ -46,11 +50,15 @@ def main(args):
         int(np.prod(sampler.envs.observation_space.shape)))
 
     metalearner = MetaLearner(sampler, policy, baseline, gamma=args.gamma,
-        fast_lr=args.fast_lr, tau=args.tau, device=args.device)
+        fast_lr=args.fast_lr, tau=args.tau, device=args.device,
+        cliprange=args.cliprange, noptepochs= args.noptepochs,
+        nminibatches = args.nminibatches, ppo_lr=args.ppo_lr,
+        useSGD=args.useSGD, ppo_momentum=args.ppo_momentum)
 
     for batch in range(args.num_batches):
         tasks = sampler.sample_tasks(num_tasks=args.meta_batch_size)
-        episodes = metalearner.sample(tasks, first_order=args.first_order)
+
+        episodes = metalearner.sample(tasks, first_order=args.first_order, use_ppo=args.usePPO)
         metalearner.step(episodes, max_kl=args.max_kl, cg_iters=args.cg_iters,
             cg_damping=args.cg_damping, ls_max_steps=args.ls_max_steps,
             ls_backtrack_ratio=args.ls_backtrack_ratio)
@@ -112,6 +120,21 @@ if __name__ == '__main__':
         help='maximum number of iterations for line search')
     parser.add_argument('--ls-backtrack-ratio', type=float, default=0.8,
         help='maximum number of iterations for line search')
+    parser.add_argument('--cliprange', type=float, default=0.2,
+        help='cliprange for ppo')
+    parser.add_argument('--noptepochs', type=int, default=4,
+        help='number of epochs for ppo')
+    parser.add_argument('--nminibatches', type=int, default=8,
+        help='number of minibatches for ppo')
+    parser.add_argument('--ppo_lr', type=float, default=0.01,
+        help='lr for ppo')
+    parser.add_argument('--useSGD', default=False, action='store_true',
+        help='use SGD or ADAM for ppo')
+    parser.add_argument('--ppo_momentum', type=float, default=0.9,
+        help='momentum SGD for ppo')
+    parser.add_argument('--usePPO', default=False, action='store_true',
+        help='use PPO or VPG for ppo')
+
 
     # Miscellaneous
     parser.add_argument('--output-folder', type=str, default='maml',
@@ -120,7 +143,8 @@ if __name__ == '__main__':
         help='number of workers for trajectories sampling')
     parser.add_argument('--device', type=str, default='cpu',
         help='set the device (cpu or cuda)')
-
+    parser.add_argument('--debug-file', type=str, default='debug',
+        help='name of the debug file')
     args = parser.parse_args()
 
     # Create logs and saves folder if they don't exist
