@@ -58,7 +58,7 @@ class MetaLearner(object):
             pi,values = self.policy(epispdes.observations)
             pi,vi = self.policy(episodes.observations,params=params)
             log_probs = pi.log_prob(values.size())
-            loss = ((values-R)**2).mean())**(1/2) 
+            loss = (((values-R)**2).mean())**(1/2) 
 
 
         advantages = episodes.gae(values, tau=self.tau)
@@ -71,8 +71,8 @@ class MetaLearner(object):
         loss = loss -weighted_mean(log_probs * advantages, dim=0,
             weights=episodes.mask)
         
-        if self.baseline_typr == 'critic shared'
-        return loss
+        if self.baseline_type == 'critic shared':
+            return loss
         return loss, vf_loss
 
     def adapt(self, episodes, first_order=False):
@@ -82,15 +82,16 @@ class MetaLearner(object):
         # Get the loss on the training episodes
         if self.baseline_type =='critics shared':
            loss = self.inner_loss(episodes)
-        loss, vf_loss = self.inner_loss(episodes)
+        else:
+           loss, vf_loss = self.inner_loss(episodes)
         
 
         # Get the new parameters after a one-step gradient update
         params = self.policy.update_params(loss, step_size=self.fast_lr,
             first_order=first_order)
-        if self.baseline_type = 'critic shared':
-            loss = sled.inner_loss(episodes)[0]
-            params = self.policy.update_params(loss,step_size=self.fast_lr,first_order=first order)
+        if self.baseline_type == 'critic shared':
+            loss = sled.inner_loss(episodes)
+            #params = self.policy.update_params(loss,step_size=self.fast_lr,first_order=first order)
           
         # update value function params
         if vf_loss == -1:
@@ -124,7 +125,7 @@ class MetaLearner(object):
 
         for (train_episodes, valid_episodes), old_pi in zip(episodes, old_pis):
             params = self.adapt(train_episodes)
-            if self.baseline_type = 'critic shared':
+            if self.baseline_type == 'critic shared':
               pi,_ = self.policy(valid_episodes.obervations,params=params)
             pi = self.policy(valid_episodes.observations, params=params)
 
@@ -174,7 +175,7 @@ class MetaLearner(object):
                     values = self.baseline(valid_episodes)
                 elif self.baseline_type == 'critic separate':
                     values = self.baseline(valid_episodes.observations)
-                elif self.baseline_type == 'critic shared'
+                elif self.baseline_type == 'critic shared':
                     _,values = self.policy(valid_episodes.observations,params =params)
 
                 advantages = valid_episodes.gae(values, tau=self.tau)
