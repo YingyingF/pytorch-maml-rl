@@ -30,7 +30,7 @@ class MetaLearner(object):
                  fast_lr=0.5, tau=1.0, device='cpu', baseline_type = 'linear'):
         self.sampler = sampler
         self.policy = policy
-        if self.baseline_type == 'critic connected':
+        if self.baseline_type == 'critic shared':
            self.values = policy.value
         self.baseline = baseline
         self.gamma = gamma
