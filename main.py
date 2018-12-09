@@ -32,7 +32,7 @@ def main(args):
 
     sampler = BatchSampler(args.env_name, batch_size=args.fast_batch_size,
         num_workers=args.num_workers)
-    if baseline_type = 'critic shared':
+    if args.baseline = 'critic shared':
         policy = NormalMLPPolicyA2C(int(np.prod(sampler.envs.observation_space.shape)),
             int(np.prod(sampler.envs.action_space.shape)),
             hidden_sizes=(args.hidden_size,) * args.num_layers)
