@@ -71,7 +71,8 @@ class MetaLearner(object):
         loss = loss -weighted_mean(log_probs * advantages, dim=0,
             weights=episodes.mask)
         
-
+        if self.baseline_typr == 'critic shared'
+        return loss
         return loss, vf_loss
 
     def adapt(self, episodes, first_order=False):
@@ -79,6 +80,8 @@ class MetaLearner(object):
         sampled trajectories `episodes`, with a one-step gradient update [1].
         """
         # Get the loss on the training episodes
+        if self.baseline_type =='critics shared':
+           loss = self.inner_loss(episodes)
         loss, vf_loss = self.inner_loss(episodes)
         
 
