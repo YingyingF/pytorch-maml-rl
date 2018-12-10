@@ -56,9 +56,10 @@ class MetaLearner(object):
             R = episodes.returns.view([200, 20, 1])
             vf_loss = (((values - R) ** 2).mean()) ** (1 / 2)
         else:
-            pi,values = self.policy(epispdes.observations)
+            pi,values = self.policy(episodes.observations)
             pi,vi = self.policy(episodes.observations,params=params)
-            log_probs = pi.log_prob(values.size())
+            log_probs = pi.log_prob(episodes.actions)
+            R =episodes.returns.view(values.size())
             loss = (((values-R)**2).mean())**(1/2) 
 
 
@@ -67,6 +68,8 @@ class MetaLearner(object):
 
         pi = self.policy(episodes.observations, params=params)
         log_probs = pi.log_prob(episodes.actions)
+        if self.baseline_type == 'critic shared':
+           pi,_ = self.policy(episodes.observations,params=params)
         if log_probs.dim() > 2:
             log_probs = torch.sum(log_probs, dim=2)
         loss = loss -weighted_mean(log_probs * advantages, dim=0,
@@ -81,7 +84,7 @@ class MetaLearner(object):
         sampled trajectories `episodes`, with a one-step gradient update [1].
         """
         # Get the loss on the training episodes
-        if self.baseline_type =='critics shared':
+        if self.baseline_type =='critic shared':
            loss = self.inner_loss(episodes)
         else:
            loss, vf_loss = self.inner_loss(episodes)
@@ -91,13 +94,13 @@ class MetaLearner(object):
         params = self.policy.update_params(loss, step_size=self.fast_lr,
             first_order=first_order)
         if self.baseline_type == 'critic shared':
-            loss = sled.inner_loss(episodes)
+            loss = self.inner_loss(episodes)
             #params = self.policy.update_params(loss,step_size=self.fast_lr,first_order=first order)
           
         # update value function params
-        if vf_loss == -1:
+        if self.baseline_type == 'linear':
             self.baseline.fit(episodes)
-        else:
+        if self.baseline_type == 'critic seperate':
             self.baseline.update_params(vf_loss, step_size=self.fast_lr,
                 first_order=first_order)
 
