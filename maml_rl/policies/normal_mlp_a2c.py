@@ -17,7 +17,7 @@ class NormalMLPPolicyA2C(Policy):
     def __init__(self, input_size, output_size, hidden_sizes=(),
                  nonlinearity=F.relu, init_std=1.0, min_std=1e-6):
 				 
-        super(NormalMLPPolicy, self).__init__(input_size=input_size, output_size=output_size)
+        super(NormalMLPPolicyA2C, self).__init__(input_size=input_size, output_size=output_size)
         self.hidden_sizes = hidden_sizes
         self.nonlinearity = nonlinearity
         self.min_log_std = math.log(min_std)
