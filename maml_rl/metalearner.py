@@ -30,14 +30,15 @@ class MetaLearner(object):
                  fast_lr=0.5, tau=1.0, device='cpu', baseline_type = 'linear'):
         self.sampler = sampler
         self.policy = policy
-        if self.baseline_type == 'critic shared':
-           self.values = policy.value
-        self.baseline = baseline
+                self.baseline = baseline
         self.gamma = gamma
         self.fast_lr = fast_lr
         self.tau = tau
         self.to(device)
         self.baseline_type = baseline_type
+        if self.baseline_type == 'critic shared':
+           self.values = policy.value
+
 
     def inner_loss(self, episodes, params=None):
         """Compute the inner loss for the one-step gradient update. The inner 
