@@ -30,7 +30,7 @@ class MetaLearner(object):
                  fast_lr=0.5, tau=1.0, device='cpu', baseline_type = 'linear'):
         self.sampler = sampler
         self.policy = policy
-                self.baseline = baseline
+        self.baseline = baseline
         self.gamma = gamma
         self.fast_lr = fast_lr
         self.tau = tau
@@ -100,7 +100,7 @@ class MetaLearner(object):
         # update value function params
         if self.baseline_type == 'linear':
             self.baseline.fit(episodes)
-        if self.baseline_type == 'critic seperate':
+        if self.baseline_type == 'critic separate':
             self.baseline.update_params(vf_loss, step_size=self.fast_lr,
                 first_order=first_order)
 
@@ -131,7 +131,8 @@ class MetaLearner(object):
             params = self.adapt(train_episodes)
             if self.baseline_type == 'critic shared':
               pi,_ = self.policy(valid_episodes.obervations,params=params)
-            pi = self.policy(valid_episodes.observations, params=params)
+            else:
+              pi = self.policy(valid_episodes.observations, params=params)
 
             if old_pi is None:
                 old_pi = detach_distribution(pi)
@@ -169,7 +170,8 @@ class MetaLearner(object):
             with torch.set_grad_enabled(old_pi is None):
                 if self.baseline_type == 'critic shared':
                   pi,_ = self.policy(valid_episodes.observations,params =params)
-                pi = self.policy(valid_episodes.observations, params=params)
+                else:
+                  pi = self.policy(valid_episodes.observations, params=params)
                 pis.append(detach_distribution(pi))
 
                 if old_pi is None:
