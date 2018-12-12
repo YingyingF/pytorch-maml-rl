@@ -43,7 +43,9 @@ class MetaLearner(object):
 
     def __init__(self, sampler, policy, baseline, gamma=0.95,
                  fast_lr=0.5, tau=1.0, device='cpu',cliprange=0.2, noptepochs=4,
-                nminibatches=8,ppo_lr=0.01,useSGD=True,ppo_momentum=0,baseline_type = 'linear'):
+                nminibatches=8,ppo_lr=0.01,useSGD=True,ppo_momentum=0,baseline_type = 'linear',
+                grad_clip = 0.5):
+
         self.sampler = sampler
         self.policy = policy
         #if self.baseline_type == 'critic connected':
@@ -60,6 +62,7 @@ class MetaLearner(object):
         self.useSGD=useSGD
         self.ppo_momentum=ppo_momentum
         self.baseline_type = baseline_type
+        self.grad_clip = grad_clip
 
     def inner_loss(self, episodes, params=None):
         """Compute the inner loss for the one-step gradient update. The inner
@@ -146,6 +149,7 @@ class MetaLearner(object):
             # Randomize the indexes
             #np.random.shuffle(inds)
             mb_vf_loss = torch.zeros(1)
+            grad_norm = []
             # 0 to batch_size with batch_train_size step
             for start in range(0, nbatch, nbatch_train):
 
@@ -236,7 +240,9 @@ class MetaLearner(object):
                 # Save the old parameters
                 old_params = parameters_to_vector(self.policy.parameters())
 
+                #calculate gradient
                 loss.backward()
+                grad_norm.append(torch.nn.utils.clip_grad_norm_(self.policy.parameters(), self.grad_clip))
                 optimizer.step()
                 mblossvals.append(loss)
 
@@ -256,7 +262,7 @@ class MetaLearner(object):
 
         self.logger.info("vf_loss: ")
         self.logger.info(vf_loss)
-        return updated_params, vf_loss
+        return updated_params, vf_loss, grad_norm
 
     def adapt(self, episodes, first_order=False):
         """Adapt the parameters of the policy network to a new task, from
@@ -294,14 +300,14 @@ class MetaLearner(object):
             self.baseline.fit(episodes)
 
         # Get the loss on the training episodes
-        params,vf_loss = self.inner_loss_ppo(episodes,first_order)
+        params,vf_loss,grad_norm = self.inner_loss_ppo(episodes,first_order)
 
         #Case with AC.
         if vf_loss != -1:
             self.baseline.update_params(vf_loss, step_size=self.fast_lr,
                 first_order=first_order)
 
-        return params
+        return params, grad_norm
 
     def sample(self, tasks, first_order=False,use_ppo=True):
         """Sample trajectories (before and after the update of the parameters)
@@ -315,9 +321,10 @@ class MetaLearner(object):
                 gamma=self.gamma, device=self.device)
 
             if use_ppo:
-                params = self.adapt_ppo(train_episodes, first_order=first_order)
+                params,grad_norm = self.adapt_ppo(train_episodes, first_order=first_order)
             else:
                 params = self.adapt(train_episodes, first_order=first_order)
+                grad_norm = []
 
             self.logger.debug('mu parameter after update:')
             self.logger.debug(params['mu.weight'])
@@ -331,7 +338,7 @@ class MetaLearner(object):
                 str(total_rewards([ep.rewards for ep, _ in episodes])))
             self.logger.info('total_rewards/after_update'+
                 str(total_rewards([ep.rewards for _, ep in episodes])))
-        return episodes
+        return episodes, grad_norm
 
     def kl_divergence(self, episodes, old_pis=None):
         kls = []
@@ -379,7 +386,7 @@ class MetaLearner(object):
             old_pis = [None] * len(episodes)
 
         for (train_episodes, valid_episodes), old_pi in zip(episodes, old_pis):
-            params = self.adapt_ppo(train_episodes)
+            params = self.adapt(train_episodes)
             self.logger.info("in surrogate_loss")
             with torch.set_grad_enabled(old_pi is None):
                 if self.baseline_type == 'critic shared':

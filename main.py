@@ -67,7 +67,7 @@ def main(args):
         fast_lr=args.fast_lr, tau=args.tau, device=args.device,baseline_type = args.baseline,
         cliprange=args.cliprange, noptepochs= args.noptepochs,
         nminibatches = args.nminibatches, ppo_lr=args.ppo_lr,
-        useSGD=args.useSGD, ppo_momentum=args.ppo_momentum)
+        useSGD=args.useSGD, ppo_momentum=args.ppo_momentum, grad_clip = args.grad_clip)
 
     for batch in range(args.num_batches):
         print("*********************** Batch: " + str(batch) + "  ****************************")
@@ -76,7 +76,7 @@ def main(args):
         tasks = sampler.sample_tasks(num_tasks=args.meta_batch_size)
 
         print("Creating episodes...")
-        episodes = metalearner.sample(tasks, first_order=args.first_order, use_ppo=args.usePPO)
+        episodes,grad_norm = metalearner.sample(tasks, first_order=args.first_order, use_ppo=args.usePPO)
 
         print("Taking a meta step...")
         metalearner.step(episodes, max_kl=args.max_kl, cg_iters=args.cg_iters,
@@ -89,6 +89,8 @@ def main(args):
             total_rewards([ep.rewards for ep, _ in episodes]), batch)
         writer.add_scalar('total_rewards/after_update',
             total_rewards([ep.rewards for _, ep in episodes]), batch)
+        writer.add_scalar('PPO mb grad norm', np.average(grad_norm))
+        print(np.average(grad_norm))
 
         print("Saving policy network...")
         # Save policy network
@@ -158,7 +160,8 @@ if __name__ == '__main__':
         help='momentum SGD for ppo')
     parser.add_argument('--usePPO', default=False, action='store_true',
         help='use PPO or VPG for ppo')
-
+    parser.add_argument('--grad_clip', type=float, default=2,
+        help='clip gradient value')
 
     # Miscellaneous
     parser.add_argument('--output-folder', type=str, default='maml',
