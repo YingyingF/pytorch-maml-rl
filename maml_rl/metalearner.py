@@ -44,7 +44,7 @@ class MetaLearner(object):
     def __init__(self, sampler, policy, baseline, gamma=0.95,
                  fast_lr=0.5, tau=1.0, device='cpu',cliprange=0.2, noptepochs=4,
                 nminibatches=8,ppo_lr=0.01,useSGD=True,ppo_momentum=0,baseline_type = 'linear',
-                grad_clip = 0.5):
+                grad_clip = 0.5, usePPO = True):
 
         self.sampler = sampler
         self.policy = policy
@@ -63,6 +63,7 @@ class MetaLearner(object):
         self.ppo_momentum=ppo_momentum
         self.baseline_type = baseline_type
         self.grad_clip = grad_clip
+        self.usePPO = usePPO
 
     def inner_loss(self, episodes, params=None):
         """Compute the inner loss for the one-step gradient update. The inner
@@ -309,7 +310,7 @@ class MetaLearner(object):
 
         return params, grad_norm
 
-    def sample(self, tasks, first_order=False,use_ppo=True):
+    def sample(self, tasks, first_order=False):
         """Sample trajectories (before and after the update of the parameters)
         for all the tasks `tasks`.
         """
@@ -320,7 +321,7 @@ class MetaLearner(object):
             train_episodes = self.sampler.sample(self.policy,
                 gamma=self.gamma, device=self.device)
 
-            if use_ppo:
+            if self.usePPO:
                 params,grad_norm = self.adapt_ppo(train_episodes, first_order=first_order)
             else:
                 params = self.adapt(train_episodes, first_order=first_order)
@@ -347,7 +348,10 @@ class MetaLearner(object):
 
         for (train_episodes, valid_episodes), old_pi in zip(episodes, old_pis):
             self.logger.info("in kl divergence")
-            params = self.adapt(train_episodes)
+            if self.usePPO:
+                params,grad_norm = self.adapt_ppo(train_episodes)
+            else:
+                params = self.adapt(train_episodes)
             #if self.baseline_type = 'critic shared':
             #  pi,_ = self.policy(valid_episodes.obervations,params=params)
             pi = self.policy(valid_episodes.observations, params=params)
@@ -362,6 +366,8 @@ class MetaLearner(object):
             kls.append(kl)
         self.logger.info("kl:")
         self.logger.info(kls)
+        self.logger.info("grad_norm:")
+        self.logger.info(grad_norm)
         #pdb.set_trace()
         return torch.mean(torch.stack(kls, dim=0))
 
@@ -386,7 +392,10 @@ class MetaLearner(object):
             old_pis = [None] * len(episodes)
 
         for (train_episodes, valid_episodes), old_pi in zip(episodes, old_pis):
-            params = self.adapt(train_episodes)
+            if self.usePPO:
+                params,grad_norm = self.adapt_ppo(train_episodes)
+            else:
+                params = self.adapt(train_episodes)
             self.logger.info("in surrogate_loss")
             with torch.set_grad_enabled(old_pi is None):
                 if self.baseline_type == 'critic shared':

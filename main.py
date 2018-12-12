@@ -65,7 +65,7 @@ def main(args):
 
     metalearner = MetaLearner(sampler, policy, baseline, gamma=args.gamma,
         fast_lr=args.fast_lr, tau=args.tau, device=args.device,baseline_type = args.baseline,
-        cliprange=args.cliprange, noptepochs= args.noptepochs,
+        cliprange=args.cliprange, noptepochs= args.noptepochs,usePPO=args.usePPO,
         nminibatches = args.nminibatches, ppo_lr=args.ppo_lr,
         useSGD=args.useSGD, ppo_momentum=args.ppo_momentum, grad_clip = args.grad_clip)
 
@@ -76,7 +76,7 @@ def main(args):
         tasks = sampler.sample_tasks(num_tasks=args.meta_batch_size)
 
         print("Creating episodes...")
-        episodes,grad_norm = metalearner.sample(tasks, first_order=args.first_order, use_ppo=args.usePPO)
+        episodes,grad_norm = metalearner.sample(tasks, first_order=args.first_order)
 
         print("Taking a meta step...")
         metalearner.step(episodes, max_kl=args.max_kl, cg_iters=args.cg_iters,
@@ -89,8 +89,10 @@ def main(args):
             total_rewards([ep.rewards for ep, _ in episodes]), batch)
         writer.add_scalar('total_rewards/after_update',
             total_rewards([ep.rewards for _, ep in episodes]), batch)
-        writer.add_scalar('PPO mb grad norm', np.average(grad_norm))
-        print(np.average(grad_norm))
+
+        if grad_norm:
+            writer.add_scalar('PPO mb grad norm', np.average(grad_norm))
+            print(np.average(grad_norm))
 
         print("Saving policy network...")
         # Save policy network
