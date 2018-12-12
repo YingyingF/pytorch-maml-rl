@@ -138,11 +138,14 @@ class MetaLearner(object):
 
         inds = np.arange(nbatch)
 
+        # For the case with linear baseline.
+        vf_loss = -1
+
         for epoch in range(self.noptepochs):
 
             # Randomize the indexes
             #np.random.shuffle(inds)
-
+            mb_vf_loss = torch.zeros(1)
             # 0 to batch_size with batch_train_size step
             for start in range(0, nbatch, nbatch_train):
 
@@ -159,7 +162,16 @@ class MetaLearner(object):
                     mb_actions.append(episodes_flat.actions[0][mbinds[i]].numpy())
                     mb_episodes.append([mb_obs[i]],[mb_actions[i]],[mb_returns[i]],(i,))
 
-                values = self.baseline(mb_episodes)
+                if self.baseline_type == 'linear':
+                    values = self.baseline(mb_episodes)
+                elif self.baseline_type == 'critic separate':
+                    values = self.baseline(mb_episodes.observations)
+                    # find value loss sum [(R-V(s))^2]
+                    R = torch.FloatTensor(np.array(mb_returns))
+                    mb_vf_loss=(((values - R) ** 2).mean()) + mb_vf_loss
+
+                #values = self.baseline(mb_episodes)
+
                 advantages = mb_episodes.gae(values, tau=self.tau)
                 advantages_unnorm = advantages
                 advantages = weighted_normalize(advantages.type(torch.float32), weights=torch.ones(1,advantages.shape[1]))
@@ -238,7 +250,13 @@ class MetaLearner(object):
         for (name, param) in old_param_unpack:
             updated_params[name] = param
 
-        return updated_params
+        #For A2C case, need to return vf_loss.
+        if self.baseline_type == 'critic separate':
+            vf_loss = (mb_vf_loss/self.nminibatches)** (1 / 2)
+
+        self.logger.info("vf_loss: ")
+        self.logger.info(vf_loss)
+        return updated_params, vf_loss
 
     def adapt(self, episodes, first_order=False):
         """Adapt the parameters of the policy network to a new task, from
@@ -257,6 +275,7 @@ class MetaLearner(object):
         #    params = self.policy.update_params(loss,step_size=self.fast_lr,first_order=first order)
 
         # update value function params
+        # Should this be before the inner loss function for linear case??
         if vf_loss == -1:
             self.baseline.fit(episodes)
         else:
@@ -270,9 +289,17 @@ class MetaLearner(object):
         sampled trajectories `episodes`, with a one-step gradient update [1].
         """
         # Fit the baseline to the training episodes. NEED TO CHANGE TO V(s).
-        self.baseline.fit(episodes)
+        #Case with linear baseline only.
+        if self.baseline_type == 'linear':
+            self.baseline.fit(episodes)
+
         # Get the loss on the training episodes
-        params = self.inner_loss_ppo(episodes,first_order)
+        params,vf_loss = self.inner_loss_ppo(episodes,first_order)
+
+        #Case with AC.
+        if vf_loss != -1:
+            self.baseline.update_params(vf_loss, step_size=self.fast_lr,
+                first_order=first_order)
 
         return params
 
