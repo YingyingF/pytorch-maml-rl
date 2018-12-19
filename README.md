@@ -1,39 +1,20 @@
 # Reinforcement Learning with Model-Agnostic Meta-Learning (MAML)
 
-![HalfCheetahDir](https://raw.githubusercontent.com/tristandeleu/pytorch-maml-rl/master/_assets/halfcheetahdir.gif)
+This codebase is based on a forked version of [tristandeleu/pytorch-maml-rl](https://github.com/tristandeleu/pytorch-maml-rl), which implemented Model-Agnostic Meta-Learning (MAML) applied on Reinforcement Learning problems in Pytorch. This codebase extends the original implementation by adding the option to train with A2C and PPO as well as the original policy methods VPG and TRPO. An additional environment is included called PendulumTheta-v0.
 
-Implementation of Model-Agnostic Meta-Learning (MAML) applied on Reinforcement Learning problems in Pytorch. This repository includes environments introduced in ([Duan et al., 2016](https://arxiv.org/abs/1611.02779), [Finn et al., 2017](https://arxiv.org/abs/1703.03400)): multi-armed bandits, tabular MDPs, continuous control with MuJoCo, and 2D navigation task.
-
-## Getting started
-To avoid any conflict with your existing Python setup, and to keep this project self-contained, it is suggested to work in a virtual environment with [`virtualenv`](http://docs.python-guide.org/en/latest/dev/virtualenvs/). To install `virtualenv`:
-```
-pip install --upgrade virtualenv
-```
-Create a virtual environment, activate it and install the requirements in [`requirements.txt`](requirements.txt).
-```
-virtualenv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
+Dependencies are the same as the original codebase.
 
 ## Usage
-You can use the [`main.py`](main.py) script in order to run reinforcement learning experiments with MAML. This script was tested with Python 3.5. Note that some environments may also work with Python 2.7 (all experiments besides MuJoCo-based environments).
+You can use the [`main.py`](main.py) script in order to run reinforcement learning experiments with MAML.
 ```
-python main.py --env-name HalfCheetahDir-v1 --num-workers 8 --fast-lr 0.1 --max-kl 0.01 --fast-batch-size 20 --meta-batch-size 40 --num-layers 2 --hidden-size 100 --num-batches 1000 --gamma 0.99 --tau 1.0 --cg-damping 1e-5 --ls-max-steps 15 --output-folder maml-halfcheetah-dir --device cuda
+python main.py --env-name PendulumTheta-v0 --num-workers 8 --fast-lr 0.1 --max-kl 0.01 --fast-batch-size 20 --meta-batch-size 10 --num-layers 2 --hidden-size 100 --num-batches 200 --gamma 0.99 --tau 1.0 --cg-damping 1e-5 --ls-max-steps 15 --output-folder output_folder --debug-file debug --device cpu --cliprange 0.2 --noptepochs 2 --nminibatches 4 --ppo_lr 0.001  --useSGD --ppo_momentum 0 --grad_clip 200
 ```
+
+To train with PPO, use the option --usePPO
+The additional PPO parameters are --cliprange --noptepochs --nminibatches --ppo_lr --useSGD --ppo_momentum -- grad_clip
+To train with A2C, use the option --baseline 'critic separate'
 
 ## References
-This project is, for the most part, a reproduction of the original implementation [cbfinn/maml_rl](https://github.com/cbfinn/maml_rl/) in Pytorch. These experiments are based on the paper
+This project is based on the original implementation of MAML [cbfinn/maml_rl](https://github.com/cbfinn/maml_rl/) in Pytorch. These experiments are based on the paper
 > Chelsea Finn, Pieter Abbeel, and Sergey Levine. Model-agnostic meta-learning for fast adaptation of deep
 networks. _International Conference on Machine Learning (ICML)_, 2017 [[ArXiv](https://arxiv.org/abs/1703.03400)]
-
-If you want to cite this paper
-```
-@article{DBLP:journals/corr/FinnAL17,
-  author    = {Chelsea Finn and Pieter Abbeel and Sergey Levine},
-  title     = {Model-{A}gnostic {M}eta-{L}earning for {F}ast {A}daptation of {D}eep {N}etworks},
-  journal   = {International Conference on Machine Learning (ICML)},
-  year      = {2017},
-  url       = {http://arxiv.org/abs/1703.03400}
-}
-```
