@@ -11,7 +11,9 @@ python main.py --env-name PendulumTheta-v0 --num-workers 8 --fast-lr 0.1 --max-k
 ```
 
 To train with PPO, use the option --usePPO
+
 The additional PPO parameters are --cliprange --noptepochs --nminibatches --ppo_lr --useSGD --ppo_momentum -- grad_clip
+
 To train with A2C, use the option --baseline 'critic separate'
 
 ## References
